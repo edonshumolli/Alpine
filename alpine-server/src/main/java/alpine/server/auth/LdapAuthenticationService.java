@@ -32,7 +32,7 @@ import java.util.List;
 
 /**
  * Class that performs authentication against LDAP servers.
- *
+ * 
  * @author Steve Springett
  * @since 1.0.0
  */
@@ -125,7 +125,7 @@ public class LdapAuthenticationService implements AuthenticationService {
                     user = qm.synchronizeTeamMembership(user, groupDNs);
                 }
             } else {
-                LOGGER.warn("Could not find '" + username + "' in the directory while provisioning the user. Ensure '" + Config.AlpineKey.LDAP_ATTRIBUTE_NAME.getPropertyName() + "' is defined correctly");
+                LOGGER.warn("Could not find '" + username + "' in the directory while provisioning the user. Ensure '" + Config.AlpineKey.LDAP_ATTRIBUTE_NAME.getPropertyName() + "' is defined correctly.");
                 throw new AlpineAuthenticationException(AlpineAuthenticationException.CauseType.UNMAPPED_ACCOUNT);
             }
         } catch (NamingException e) {
@@ -150,19 +150,13 @@ public class LdapAuthenticationService implements AuthenticationService {
         DirContext dirContext = null;
         LdapContext ldapContext = null;
         try (AlpineQueryManager qm = new AlpineQueryManager()) {
-            final LdapUser ldapUser = qm.getLdapUser(username);
-            if (ldapUser != null && ldapUser.getDN() != null && ldapUser.getDN().contains("=")) {
-                ldapContext = ldap.createLdapContext(ldapUser.getDN(), password);
+            ldapContext = validateExistingLdapUserCredentials(qm, ldap);
+            if (ldapContext == null) {
+                ldapContext = validateNewLdapUserCredentials(ldap);
+            }
+            if (ldapContext != null) {
                 LOGGER.debug("The supplied credentials are valid for: " + username);
                 return true;
-            } else {
-                dirContext = ldap.createDirContext();
-                final SearchResult result = ldap.searchForSingleUsername(dirContext, username);
-                if (result != null ) {
-                    ldapContext = ldap.createLdapContext(result.getNameInNamespace(), password);
-                    LOGGER.debug("The supplied credentials are invalid for: " + username);
-                    return true;
-                }
             }
         } catch (NamingException e) {
             LOGGER.debug("An error occurred while attempting to validate credentials", e);
@@ -171,6 +165,28 @@ public class LdapAuthenticationService implements AuthenticationService {
             ldap.closeQuietly(dirContext);
         }
         return false;
+    }
+
+    private LdapContext validateExistingLdapUserCredentials(AlpineQueryManager qm, LdapConnectionWrapper ldap) throws NamingException {
+        final LdapUser ldapUser = qm.getLdapUser(username);
+        if (ldapUser != null && ldapUser.getDN() != null && ldapUser.getDN().contains("=")) {
+            return ldap.createLdapContext(ldapUser.getDN(), password);
+        }
+        return null;
+    }
+
+    private LdapContext validateNewLdapUserCredentials(LdapConnectionWrapper ldap) throws NamingException {
+        DirContext dirContext = null;
+        try {
+            dirContext = ldap.createDirContext();
+            final SearchResult result = ldap.searchForSingleUsername(dirContext, username);
+            if (result != null) {
+                return ldap.createLdapContext(result.getNameInNamespace(), password);
+            }
+        } finally {
+            ldap.closeQuietly(dirContext);
+        }
+        return null;
     }
 
 }
