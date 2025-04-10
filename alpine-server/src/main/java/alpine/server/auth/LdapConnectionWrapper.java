@@ -84,26 +84,16 @@ public class LdapConnectionWrapper {
      * @since 1.4.0
      */
     public LdapContext createLdapContext(final String userDn, final String password) throws NamingException {
-        LOGGER.debug("Creating LDAP context for: " +userDn);
+        LOGGER.debug("Creating LDAP context for: " + userDn);
         if (StringUtils.isEmpty(userDn) || StringUtils.isEmpty(password)) {
             throw new NamingException("Username or password cannot be empty or null");
         }
-        final Hashtable<String, String> env = new Hashtable<>();
-        if (StringUtils.isNotBlank(LDAP_SECURITY_AUTH)) {
-            env.put(Context.SECURITY_AUTHENTICATION, LDAP_SECURITY_AUTH);
-        }
-        env.put(Context.SECURITY_PRINCIPAL, userDn);
-        env.put(Context.SECURITY_CREDENTIALS, password);
-        env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
-        env.put(Context.PROVIDER_URL, LDAP_URL);
-        if (IS_LDAP_SSLTLS) {
-            env.put("java.naming.ldap.factory.socket", "alpine.security.crypto.RelaxedSSLSocketFactory");
-        }
+        final Hashtable<String, String> env = createEnvironment(userDn, password);
         try {
             return new InitialLdapContext(env, null);
         } catch (CommunicationException e) {
             LOGGER.error("Failed to connect to directory server", e);
-            throw(e);
+            throw (e);
         } catch (NamingException e) {
             throw new NamingException("Failed to authenticate user");
         }
@@ -117,16 +107,33 @@ public class LdapConnectionWrapper {
      */
     public DirContext createDirContext() throws NamingException {
         LOGGER.debug("Creating directory service context (DirContext)");
+        final Hashtable<String, String> env = createEnvironment(BIND_USERNAME, BIND_PASSWORD);
+        return new InitialDirContext(env);
+    }
+
+    /**
+     * Helper method to create the environment for LDAP operations.
+     *
+     * @param principal the security principal (username or DN)
+     * @param credentials the security credentials (password)
+     * @return a Hashtable containing the environment settings
+     */
+    private Hashtable<String, String> createEnvironment(final String principal, final String credentials) {
         final Hashtable<String, String> env = new Hashtable<>();
-        env.put(Context.SECURITY_PRINCIPAL, BIND_USERNAME);
-        env.put(Context.SECURITY_CREDENTIALS, BIND_PASSWORD);
+        if (StringUtils.isNotBlank(LDAP_SECURITY_AUTH)) {
+            env.put(Context.SECURITY_AUTHENTICATION, LDAP_SECURITY_AUTH);
+        }
+        env.put(Context.SECURITY_PRINCIPAL, principal);
+        env.put(Context.SECURITY_CREDENTIALS, credentials);
         env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
         env.put(Context.PROVIDER_URL, LDAP_URL);
         if (IS_LDAP_SSLTLS) {
             env.put("java.naming.ldap.factory.socket", "alpine.security.crypto.RelaxedSSLSocketFactory");
         }
-        return new InitialDirContext(env);
+        return env;
     }
+
+}
 
     /**
      * Retrieves a list of all groups the user is a member of.
